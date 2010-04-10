@@ -363,6 +363,12 @@ void save_open_settings(void *sesskey, Config *cfg)
     write_setting_filename(sesskey, "PublicKeyFile", cfg->keyfile);
     write_setting_s(sesskey, "RemoteCommand", cfg->remote_cmd);
     write_setting_i(sesskey, "RFCEnviron", cfg->rfc_environ);
+/* PuTTY SC start */
+    write_setting_i(sesskey, "AuthPKCS11", cfg->try_pkcs11_auth);
+    write_setting_filename(sesskey, "PKCS11LibFile", cfg->pkcs11_libfile);
+    write_setting_s(sesskey, "PKCS11TokenLabel", cfg->pkcs11_token_label);
+    write_setting_s(sesskey, "PKCS11CertLabel", cfg->pkcs11_cert_label);
+/* PuTTY SC end */
     write_setting_i(sesskey, "PassiveTelnet", cfg->passive_telnet);
     write_setting_i(sesskey, "BackspaceIsDelete", cfg->bksp_is_delete);
     write_setting_i(sesskey, "RXVTHomeEnd", cfg->rxvt_homeend);
@@ -650,6 +656,16 @@ void load_open_settings(void *sesskey, Config *cfg)
 	 sizeof(cfg->remote_cmd));
     gppi(sesskey, "RFCEnviron", 0, &cfg->rfc_environ);
     gppi(sesskey, "PassiveTelnet", 0, &cfg->passive_telnet);
+/* PuTTY SC start */
+    gppi(sesskey, "AuthPKCS11", 0, &cfg->try_pkcs11_auth);
+    gppfile(sesskey, "PKCS11LibFile", &cfg->pkcs11_libfile);
+    { int k; for(k=0;k<sizeof(cfg->pkcs11_token_label);k++) cfg->pkcs11_token_label[k] = '\0'; }
+    gpps(sesskey, "PKCS11TokenLabel", "", cfg->pkcs11_token_label,
+ 	 sizeof(cfg->pkcs11_token_label));
+    { int k; for(k=0;k<sizeof(cfg->pkcs11_cert_label);k++) cfg->pkcs11_cert_label[k] = '\0'; }
+    gpps(sesskey, "PKCS11CertLabel", "", cfg->pkcs11_cert_label,
+ 	 sizeof(cfg->pkcs11_cert_label));
+/* PuTTY SC end */
     gppi(sesskey, "BackspaceIsDelete", 1, &cfg->bksp_is_delete);
     gppi(sesskey, "RXVTHomeEnd", 0, &cfg->rxvt_homeend);
     gppi(sesskey, "LinuxFunctionKeys", 0, &cfg->funky_type);

@@ -459,6 +459,14 @@ struct config_tag {
     int ssh_no_userauth;	       /* bypass "ssh-userauth" (SSH-2 only) */
     int try_tis_auth;
     int try_ki_auth;
+    /* PuTTY SC start */
+    int try_write_syslog;                /* check box (not persistent) */
+    int try_pkcs11_auth;                 /* check box */
+    Filename pkcs11_libfile;             /* token lib */
+    void *sclib;                         /* sc's owned struct */
+    char pkcs11_token_label[70];         /* token label */
+    char pkcs11_cert_label[70];          /* cert label */
+    /* PuTTY SC end */
     int try_gssapi_auth;               /* attempt gssapi auth */
     int gssapifwd;                     /* forward tgt via gss */
     int ssh_subsys;		       /* run a subsystem rather than a command */

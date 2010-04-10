@@ -16,6 +16,11 @@
 #include "sshgss.h"
 #endif
 
+/* PuTTY SC start */
+#include "pkcs11.h"
+#include "sc.h"
+/* PuTTY SC end */
+
 #ifndef FALSE
 #define FALSE 0
 #endif
@@ -449,6 +454,10 @@ enum {
 
 typedef struct ssh_tag *Ssh;
 struct Packet;
+
+/* PuTTY SC start */
+int loaded_pkcs11=FALSE;
+/* PuTTY SC end */
 
 static struct Packet *ssh1_pkt_init(int pkt_type);
 static struct Packet *ssh2_pkt_init(int pkt_type);
@@ -7168,6 +7177,9 @@ static void do_ssh2_authconn(Ssh ssh, unsigned char *in, int inlen,
 	} type;
 	int done_service_req;
 	int gotit, need_pw, can_pubkey, can_passwd, can_keyb_inter;
+        /* PuTTY SC start */
+        int can_pkcs11, tried_pkcs11, pkcs11_key_loaded;
+        /* PuTTY SC end */
 	int tried_pubkey_config, done_agent;
 #ifndef NO_GSSAPI
 	int can_gssapi;
@@ -7214,6 +7226,12 @@ static void do_ssh2_authconn(Ssh ssh, unsigned char *in, int inlen,
     s->tried_gssapi = FALSE;
 #endif
 
+    /* PuTTY SC start */
+    s->tried_pkcs11 = FALSE;
+    s->can_pkcs11 = FALSE;
+    s->pkcs11_key_loaded = FALSE;
+    /* PuTTY SC end */
+ 
     if (!ssh->cfg.ssh_no_userauth) {
 	/*
 	 * Request userauth protocol, and await a response to it.
@@ -7296,6 +7314,39 @@ static void do_ssh2_authconn(Ssh ssh, unsigned char *in, int inlen,
 		s->publickey_blob = NULL;
 	    }
 	}
+        /* PuTTY SC start */
+        else {
+          if(!loaded_pkcs11 && ssh->cfg.try_pkcs11_auth &&
+             !filename_is_null(ssh->cfg.pkcs11_libfile)) {
+            if (ssh->cfg.sclib == NULL)  { ssh->cfg.sclib = calloc(sizeof(sc_lib), 1); }
+            if(s->can_pkcs11 = sc_init_library(ssh->frontend, ssh->cfg.try_write_syslog, ssh->cfg.sclib,
+                                               &ssh->cfg.pkcs11_libfile)) {
+              loaded_pkcs11=1;
+            } else {
+              free(ssh->cfg.sclib);
+              sc_write_syslog("sc: Failed to load pkcs11 library");
+              logevent("sc: Failed to load pkcs11 library");
+            }
+          }
+          if(loaded_pkcs11 && ssh->cfg.try_pkcs11_auth) {
+            logeventf(ssh, "Using key (%s) from token (%s)",
+                      ssh->cfg.pkcs11_cert_label,
+                      ssh->cfg.pkcs11_token_label);
+
+            s->publickey_blob = (unsigned char *)sc_get_pub(ssh->frontend,
+                                                            ssh->cfg.try_write_syslog,
+                                                            ssh->cfg.sclib,
+                                                            ssh->cfg.pkcs11_token_label,
+                                                            ssh->cfg.pkcs11_cert_label,
+                                                            &s->publickey_algorithm,
+                                                            &s->publickey_bloblen);
+            s->pkcs11_key_loaded = TRUE;
+            s->publickey_encrypted = TRUE;
+            s->publickey_comment = calloc(strlen(ssh->cfg.pkcs11_cert_label) + 1, 1);
+            strcpy(s->publickey_comment, ssh->cfg.pkcs11_cert_label);
+          }
+        }
+        /* PuTTY SC end */
 
 	/*
 	 * Find out about any keys Pageant has (but if there's a
@@ -7567,6 +7618,9 @@ static void do_ssh2_authconn(Ssh ssh, unsigned char *in, int inlen,
 
 		s->can_pubkey =
 		    in_commasep_string("publickey", methods, methlen);
+                /* PuTTY SC start */
+		s->can_pkcs11= ssh->cfg.try_pkcs11_auth && s->can_pubkey && s->pkcs11_key_loaded;
+                /* PuTTY SC end */
 		s->can_passwd =
 		    in_commasep_string("password", methods, methlen);
 		s->can_keyb_inter = ssh->cfg.try_ki_auth &&
@@ -7727,12 +7781,23 @@ static void do_ssh2_authconn(Ssh ssh, unsigned char *in, int inlen,
 			s->done_agent = TRUE;
 		}
 
-	    } else if (s->can_pubkey && s->publickey_blob &&
-		       !s->tried_pubkey_config) {
+                /* PuTTY SC marker */
+ 	    } else if ((s->can_pubkey && s->publickey_blob &&
+                        !s->tried_pubkey_config) ||
+                       (s->can_pkcs11 && s->publickey_blob &&
+                        !s->tried_pkcs11 && s->pkcs11_key_loaded)) {
 
 		struct ssh2_userkey *key;   /* not live over crReturn */
 		char *passphrase;	    /* not live over crReturn */
 
+                /* PuTTY SC start */
+                struct sc_pubkey_blob *key11 = NULL;
+                char passphrase11[512];
+                if(s->can_pkcs11) {
+                  s->tried_pkcs11 = TRUE;
+                }
+                /* PuTTY SC end */
+ 
 		ssh->pkt_actx = SSH2_PKTCTX_PUBLICKEY;
 
 		s->tried_pubkey_config = TRUE;
@@ -7779,7 +7844,8 @@ static void do_ssh2_authconn(Ssh ssh, unsigned char *in, int inlen,
 		key = NULL;
 		while (!key) {
 		    const char *error;  /* not live over crReturn */
-		    if (s->publickey_encrypted) {
+                    /* PuTTY SC marker */
+		    if (s->publickey_encrypted || (s->can_pkcs11 && s->pkcs11_key_loaded)) {
 			/*
 			 * Get a passphrase from the user.
 			 */
@@ -7787,6 +7853,14 @@ static void do_ssh2_authconn(Ssh ssh, unsigned char *in, int inlen,
 			s->cur_prompt = new_prompts(ssh->frontend);
 			s->cur_prompt->to_server = FALSE;
 			s->cur_prompt->name = dupstr("SSH key passphrase");
+                        /* PuTTY SC start */
+                        if(s->can_pkcs11 && s->pkcs11_key_loaded) {
+                          add_prompt(s->cur_prompt,
+                                     dupprintf("Passphrase for smartcard \"%s\": ",
+                                               ssh->cfg.pkcs11_token_label),
+                                     FALSE, SSH_MAX_PASSWORD_LEN);
+                        } else
+                        /* PuTTY SC end */
 			add_prompt(s->cur_prompt,
 				   dupprintf("Passphrase for key \"%.100s\": ",
 					     s->publickey_comment),
@@ -7818,6 +7892,17 @@ static void do_ssh2_authconn(Ssh ssh, unsigned char *in, int inlen,
 		    /*
 		     * Try decrypting the key.
 		     */
+                    /* PuTTY SC start */
+                    if(s->can_pkcs11 && s->pkcs11_key_loaded) {
+                      key11 = sc_login_pub(ssh->frontend, ssh->cfg.try_write_syslog, ssh->cfg.sclib,
+                                           (const char *)&ssh->cfg.pkcs11_token_label, passphrase);
+                      key = (struct ssh2_userkey *)key11;
+                      if(key11) {
+                        strcpy(passphrase11, passphrase);
+                      }
+                    }
+                    else
+                    /* PuTTY SC end */
 		    key = ssh2_load_userkey(&ssh->cfg.keyfile, passphrase,
 					    &error);
 		    if (passphrase) {
@@ -7859,9 +7944,18 @@ static void do_ssh2_authconn(Ssh ssh, unsigned char *in, int inlen,
 						    /* method */
 		    ssh2_pkt_addbool(s->pktout, TRUE);
 						    /* signature follows */
+                    /* PuTTY SC start */
+                    if((key11 != NULL) && (s->pkcs11_key_loaded)) {
+                      ssh2_pkt_addstring(s->pktout, key11->alg);
+                      pkblob = calloc(key11->len,1);
+					  memcpy(pkblob, key11->data, key11->len);
+                      pkblob_len = key11->len;
+                    } else {
+                    /* PuTTY SC end */
 		    ssh2_pkt_addstring(s->pktout, key->alg->name);
 		    pkblob = key->alg->public_blob(key->data,
 						   &pkblob_len);
+                    }
 		    ssh2_pkt_addstring_start(s->pktout);
 		    ssh2_pkt_addstring_data(s->pktout, (char *)pkblob,
 					    pkblob_len);
@@ -7891,6 +7985,15 @@ static void do_ssh2_authconn(Ssh ssh, unsigned char *in, int inlen,
 			   s->pktout->length - 5);
 		    p += s->pktout->length - 5;
 		    assert(p == sigdata_len);
+                    /* PuTTY SC start */
+                    if((key11 != NULL) && (s->pkcs11_key_loaded)) {
+                      sigblob = sc_sig(ssh->frontend, ssh->cfg.try_write_syslog, ssh->cfg.sclib,
+                                       ssh->cfg.pkcs11_token_label, passphrase11,
+                                       sigdata, sigdata_len, &sigblob_len);
+                      memset(passphrase11, 0, strlen(passphrase11));
+                    }
+                    else
+                    /* PuTTY SC end */
 		    sigblob = key->alg->sign(key->data, (char *)sigdata,
 					     sigdata_len, &sigblob_len);
 		    ssh2_add_sigblob(ssh, s->pktout, pkblob, pkblob_len,
@@ -7901,6 +8004,17 @@ static void do_ssh2_authconn(Ssh ssh, unsigned char *in, int inlen,
 
 		    ssh2_pkt_send(ssh, s->pktout);
 		    s->type = AUTH_TYPE_PUBLICKEY;
+                    /* PuTTY SC start */
+                    if((key11 != NULL) && (s->pkcs11_key_loaded)) {
+                      sc_free_sclib(ssh->cfg.sclib);
+                      ssh->cfg.sclib = NULL;
+                      free(key11);
+                      key11 = NULL;
+                      loaded_pkcs11=0;
+                      s->pkcs11_key_loaded = FALSE;
+                    }
+                    else
+                    /* PuTTY SC end */
 		    key->alg->freekey(key->data);
 		}
 

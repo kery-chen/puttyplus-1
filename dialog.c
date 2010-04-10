@@ -13,6 +13,10 @@
 #include "putty.h"
 #include "dialog.h"
 
+/* PuTTY SC start */
+//#include <dirent.h>
+/* PuTTY SC end */
+
 int ctrl_path_elements(char *path)
 {
     int i = 1;
@@ -576,6 +580,23 @@ void dlg_stdfilesel_handler(union control *ctrl, void *dlg,
 	dlg_filesel_get(ctrl, dlg, (Filename *)ATOFFSET(data, offset));
     }
 }
+
+/* PuTTY SC start */
+void *sc_get_label_dialog();
+void *sc_get_label_ctrl();
+void sc_tokenlabel_handler(union control *ctrl, void *dlg, void *data, int event );
+void sc_dlg_stdfilesel_handler11(union control *ctrl, void *dlg, void *data, int event) {
+  int offset = ctrl->fileselect.context.i;
+  if (event == EVENT_REFRESH) {
+    dlg_filesel_set(ctrl, dlg, *(Filename *)ATOFFSET(data, offset));
+  } else if (event == EVENT_VALCHANGE) {
+    dlg_filesel_get(ctrl, dlg, (Filename *)ATOFFSET(data, offset));
+  }
+  if(sc_get_label_dialog() != NULL) {
+    sc_tokenlabel_handler(sc_get_label_ctrl(), sc_get_label_dialog(), data, EVENT_REFRESH);
+  }
+}
+/* PuTTY SC end */
 
 void dlg_stdfontsel_handler(union control *ctrl, void *dlg,
 			    void *data, int event)

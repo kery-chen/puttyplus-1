@@ -567,6 +567,11 @@ void dlg_stdeditbox_handler(union control *ctrl, void *dlg,
  */
 void dlg_stdfilesel_handler(union control *ctrl, void *dlg,
 			    void *data, int event);
+/* PuTTY SC start */
+void sc_dlg_stdfilesel_handler11(union control *ctrl, void *dlg,
+				 void *data, int event);
+/* PuTTY SC end */
+
 /*
  * The standard font-selector handler expects the main `context'
  * field to contain the `offsetof' a Font field in the structure

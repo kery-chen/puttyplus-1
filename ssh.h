@@ -7,6 +7,10 @@
 #include "int64.h"
 #include "misc.h"
 
+/* PuTTY SC start */
+#include "pkcs11.h"
+/* PuTTY SC end */
+
 struct ssh_channel;
 
 extern void sshfwd_close(struct ssh_channel *c);

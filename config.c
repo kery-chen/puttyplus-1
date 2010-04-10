@@ -10,6 +10,11 @@
 #include "dialog.h"
 #include "storage.h"
 
+/* PuTTY SC start */
+#include "pkcs11.h"
+#include "sc.h"
+/* PuTTY SC end */
+
 #define PRINTER_DISABLED_STRING "None (printing disabled)"
 
 #define HOST_BOX_TITLE "Host Name (or IP address)"
@@ -367,6 +372,174 @@ struct sessionsaver_data {
     struct sesslist sesslist;
     int midsession;
 };
+
+/* PuTTY SC start */
+void *m_label_dlg = NULL;
+void *m_cert_dlg = NULL;
+void *m_keystring_dlg = NULL;
+void *sc_get_label_dialog() {
+  return m_label_dlg;
+}
+void *m_label_ctrl = NULL;
+void *m_cert_ctrl = NULL;
+void *m_keystring_ctrl = NULL;
+void *sc_get_label_ctrl() {
+  return m_label_ctrl;
+}
+
+void sc_cert_handler(union control *ctrl, void *dlg, void *data, int event);
+void sc_tokenlabel_handler(union control *ctrl, void *dlg, void *data, int event ) {
+  Config *cfg = (Config *)data;
+  m_label_dlg = dlg;
+  m_label_ctrl = ctrl;
+
+  if(event == EVENT_REFRESH) {
+    dlg_update_start(ctrl, dlg);
+    dlg_listbox_clear(ctrl, dlg);
+    if(filename_is_null(cfg->pkcs11_libfile)) {
+      strcpy(cfg->pkcs11_token_label, "");
+      dlg_listbox_add(ctrl, dlg, "<E: SELECT LIBRARY FIRST!>");
+    } else {
+      int i;
+      CK_RV  rv = 0;
+      HINSTANCE hLib = LoadLibrary((char *)&cfg->pkcs11_libfile);
+      CK_C_GetFunctionList pGFL = (CK_RV (*)(CK_FUNCTION_LIST_PTR_PTR))GetProcAddress(hLib, "C_GetFunctionList");
+      if (pGFL == NULL) {
+        strcpy(cfg->pkcs11_token_label, "");
+        dlg_listbox_add(ctrl, dlg, "<E: WRONG LIBRARY!>");
+      } else {
+        CK_FUNCTION_LIST_PTR fl  = 0;
+        rv = pGFL(&fl);
+        if(rv != CKR_OK) {
+          strcpy(cfg->pkcs11_token_label, "");
+          dlg_listbox_add(ctrl, dlg, "<E: ACCESS TO LIBRARY FAILED!>");
+        } else {
+		  int rv1, rv2;
+          unsigned long slot_count = 16;
+          CK_SLOT_ID slots[16];
+		  rv1 = fl->C_Initialize(0);
+		  rv2 = fl->C_GetSlotList(TRUE, slots, &slot_count);
+          if((rv1 != CKR_OK) || (rv2 != CKR_OK)) {
+            strcpy(cfg->pkcs11_token_label, "");
+            dlg_listbox_add(ctrl, dlg, "<E: NO SLOTS FOUND!>");
+          } else {
+            if(slot_count == 0) {
+              strcpy(cfg->pkcs11_token_label, "");
+              dlg_listbox_add(ctrl, dlg, "<E: NO TOKEN FOUND!>");
+            }
+            for(i=0; i<slot_count; i++) {
+              CK_TOKEN_INFO token_info;
+              CK_SLOT_ID slot = 64;
+              slot = slots[i];
+              fl->C_GetTokenInfo(slot,&token_info);
+              {
+                char buf[40];
+                int j;
+                memset(buf, 0, 40);
+                strncpy(buf, token_info.label, 30);
+                for(j=29;j>0;j--) {
+                  if(buf[j] == ' ') {
+                    buf[j] = '\0';
+                  } else {
+                    break;
+                  }
+                }
+                dlg_listbox_add(ctrl, dlg, buf);
+              }
+            }
+          }
+          fl->C_Finalize(0);
+        }
+      }
+      FreeLibrary(hLib);
+    }
+    dlg_editbox_set(ctrl, dlg, cfg->pkcs11_token_label);
+    dlg_update_done(ctrl, dlg);
+  } else if (event == EVENT_VALCHANGE) {
+    char buf[70];
+    dlg_editbox_get(ctrl, dlg, buf,
+                    sizeof(buf));
+    if(strncmp(buf, "<E: ", 4) != 0){
+      strcpy(cfg->pkcs11_token_label, buf);
+    }
+  }
+  if(m_cert_dlg != NULL) {
+    sc_cert_handler(m_cert_ctrl, m_cert_dlg, data, EVENT_REFRESH);
+  }
+
+}
+
+void sc_keystring_handler(union control *ctrl, void *dlg, void *data, int event ) {
+  m_keystring_dlg = dlg;
+  m_keystring_ctrl = ctrl;
+}
+
+void sc_cert_handler(union control *ctrl, void *dlg, void *data, int event ) {
+  Config *cfg = (Config *)data;
+  m_cert_dlg = dlg;
+  m_cert_ctrl = ctrl;
+    
+  if(event == EVENT_REFRESH) {
+    dlg_update_start(ctrl, dlg);
+    dlg_listbox_clear(ctrl, dlg);
+    if(cfg->pkcs11_token_label == NULL ||
+       strlen(cfg->pkcs11_token_label) == 0) {
+      strcpy(cfg->pkcs11_token_label, "");
+      dlg_listbox_add(ctrl, dlg, "<E: SELECT TOKEN FIRST!>");
+    } else {
+      sc_lib *sclib;
+      if (cfg->sclib == NULL) { cfg->sclib = calloc(sizeof(sc_lib), 1); }
+      sclib = cfg->sclib;
+      sc_init_library(NULL, 0, sclib, &cfg->pkcs11_libfile);
+      if(sclib->m_fl) {
+        CK_SESSION_HANDLE session = sc_get_session(NULL, 0, sclib->m_fl, cfg->pkcs11_token_label);
+        if(session) {
+          char msg[1024] = "";
+          sc_cert_list *pcl;
+          sc_cert_list *cl = sc_get_cert_list(sclib, session, msg);
+          pcl = cl;
+          while(pcl != NULL) {
+            char *p_buf;
+            p_buf = calloc(1,pcl->cert_attr[0].ulValueLen+1);
+            strncpy(p_buf, pcl->cert_attr[0].pValue, pcl->cert_attr[0].ulValueLen);
+            dlg_listbox_add(ctrl, dlg, p_buf);
+            free(p_buf);
+            pcl = pcl->next;
+          }
+          sc_free_cert_list(cl);
+          //          sclib->m_fl->C_CloseSession(session);
+        }
+        //        sclib->m_fl->C_Finalize(0);
+      }
+      // free(sclib);
+    }
+    dlg_editbox_set(ctrl, dlg, cfg->pkcs11_cert_label);
+    dlg_update_done(ctrl, dlg);
+  } else if (event == EVENT_VALCHANGE) {
+    sc_lib *sclib;
+    char token_label[70];
+    char cert_label[70];
+    int blob_len; 
+    char *algorithm; /* minor memory leak */
+    sclib = cfg->sclib;
+    dlg_editbox_get(m_label_ctrl, m_label_dlg, token_label, sizeof(token_label));
+    dlg_editbox_get(ctrl, dlg, cert_label, sizeof(cert_label));
+    if(strncmp(cert_label, "<E: ", 4) != 0) {
+      strcpy(cfg->pkcs11_cert_label, cert_label);
+      sc_get_pub(NULL, 0, sclib, token_label, cert_label, &algorithm, &blob_len);
+      if (m_keystring_dlg != NULL && sclib && sclib->keystring != NULL) {
+        dlg_editbox_set(m_keystring_ctrl, m_keystring_dlg, sclib->keystring);
+      }
+      if (sclib == NULL) {
+        dlg_editbox_set(m_keystring_ctrl, m_keystring_dlg, "no sclib");
+      } else
+        if (sclib->keystring == NULL) {
+          dlg_editbox_set(m_keystring_ctrl, m_keystring_dlg, "no sclib keystring");
+        }
+    }
+  }
+}
+/* PuTTY SC end */
 
 /* 
  * Helper function to load the session selected in the list box, if
@@ -2106,6 +2279,41 @@ void setup_config_box(struct controlbox *b, int midsession,
 	}
 
 	if (!midsession) {
+          /* PuTTY SC start */
+          /*
+           * The Connection/SSH/Pkcs11 panel.
+           */
+          ctrl_settitle(b, "Connection/SSH/Pkcs11",
+                        "Options controlling PKCS11 SSH authentication");
+          
+          s = ctrl_getset(b, "Connection/SSH/Pkcs11", "methods",
+                          "Authentication methods");
+          ctrl_checkbox(s, "Use Windows event log", NO_SHORTCUT,
+                        HELPCTX(ssh_write_syslog),
+                        dlg_stdcheckbox_handler,
+                        I(offsetof(Config,try_write_syslog)));
+          ctrl_checkbox(s, "Attempt \"PKCS#11 smartcard\" auth (SSH-2)", NO_SHORTCUT,
+                        HELPCTX(ssh_auth_pkcs11),
+                        dlg_stdcheckbox_handler,
+                        I(offsetof(Config,try_pkcs11_auth)));
+          
+          s = ctrl_getset(b, "Connection/SSH/Pkcs11", "params",
+                          "Authentication parameters");
+          ctrl_filesel(s, "PKCS#11 library for authentication:", NO_SHORTCUT,
+                       FALSE , FALSE, "Select PKCS#11 library file",
+                       HELPCTX(ssh_auth_pkcs11_libfile),
+                       sc_dlg_stdfilesel_handler11, I(offsetof(Config, pkcs11_libfile)));
+          m_label_ctrl = ctrl_combobox(s, "Token label:",
+                        NO_SHORTCUT, 70, HELPCTX(ssh_auth_pkcs11_token_label),
+                        sc_tokenlabel_handler, P(NULL), P(NULL));
+          m_cert_ctrl = ctrl_combobox(s, "Certificate label:",
+                        NO_SHORTCUT, 70, HELPCTX(ssh_auth_pkcs11_cert_label),
+                        sc_cert_handler, P(NULL), P(NULL));
+          m_keystring_ctrl = ctrl_editbox(s, "SSH keystring:",
+                        NO_SHORTCUT, 100, HELPCTX(ssh_auth_pkcs11_cert_label),
+                        sc_keystring_handler, P(NULL), P(NULL));
+          
+          /* PuTTY SC end */
 	    /*
 	     * The Connection/SSH/TTY panel.
 	     */
