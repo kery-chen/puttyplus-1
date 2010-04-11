@@ -4,4 +4,6 @@
 *.swp
 windows/msvc/*/Release
 windows/msvc/*/Debug
+*.o
+*.exe
 

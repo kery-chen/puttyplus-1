@@ -176,6 +176,10 @@ DECL_WINDOWS_FUNCTION(static, int, WSAIoctl,
 		      (SOCKET, DWORD, LPVOID, DWORD, LPVOID, DWORD,
 		       LPDWORD, LPWSAOVERLAPPED,
 		       LPWSAOVERLAPPED_COMPLETION_ROUTINE));
+// Start puttycyg
+DECL_WINDOWS_FUNCTION(static, int, getsockname,
+		      (SOCKET, const struct sockaddr FAR *, int FAR *));
+// End puttycyg
 #ifndef NO_IPV6
 DECL_WINDOWS_FUNCTION(static, int, getaddrinfo,
 		      (const char *nodename, const char *servname,
@@ -1239,6 +1243,27 @@ Socket sk_newlistener(char *srcaddr, int port, Plug plug, int local_host_only,
 
     return (Socket) ret;
 }
+
+// Start puttycyg
+#include <Winsock2.h>
+int sk_getport(Socket sock)
+{
+    /* I won't even try to get IPv6 working here since it is apparently borken
+     * in this release of PuTTY */
+    SOCKADDR_IN a;
+    socklen_t salen;
+    int retcode;
+    Actual_Socket s = (Actual_Socket)sock;
+
+    salen = sizeof(a);
+    retcode = getsockname(s->s, (struct sockaddr *) &a, &salen);
+
+    if (retcode != 0)
+	return -1;
+
+    return p_ntohs(a.sin_port);
+}
+// End puttycyg
 
 static void sk_tcp_close(Socket sock)
 {

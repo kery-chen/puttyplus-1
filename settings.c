@@ -497,6 +497,10 @@ void save_open_settings(void *sesskey, Config *cfg)
     write_setting_i(sesskey, "SerialStopHalfbits", cfg->serstopbits);
     write_setting_i(sesskey, "SerialParity", cfg->serparity);
     write_setting_i(sesskey, "SerialFlowControl", cfg->serflow);
+    // Start cygputty
+    write_setting_i(sesskey, "CygtermAutoPath", cfg->cygautopath);
+    write_setting_s(sesskey, "CygtermCommand", cfg->cygcmd);
+    // End cygputty
 }
 
 void load_settings(char *section, Config * cfg)
@@ -846,6 +850,10 @@ void load_open_settings(void *sesskey, Config *cfg)
     gppi(sesskey, "SerialStopHalfbits", 2, &cfg->serstopbits);
     gppi(sesskey, "SerialParity", SER_PAR_NONE, &cfg->serparity);
     gppi(sesskey, "SerialFlowControl", SER_FLOW_XONXOFF, &cfg->serflow);
+    // Start cygputty
+    gppi(sesskey, "CygtermAutoPath", 1, &cfg->cygautopath);
+    gpps(sesskey, "CygtermCommand", "", cfg->cygcmd, sizeof(cfg->cygcmd));
+    // End cygputty
 }
 
 void do_defaults(char *session, Config * cfg)

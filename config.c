@@ -33,6 +33,11 @@ static void config_host_handler(union control *ctrl, void *dlg,
 	     */
 	    dlg_label_change(ctrl, dlg, "Serial line");
 	    dlg_editbox_set(ctrl, dlg, cfg->serline);
+	// Start cygputty
+	} else if (cfg->protocol == PROT_CYGTERM) {
+	    dlg_label_change(ctrl, dlg, "Command (use - for login shell)");
+	    dlg_editbox_set(ctrl, dlg, cfg->cygcmd);
+	// End cygputty
 	} else {
 	    dlg_label_change(ctrl, dlg, HOST_BOX_TITLE);
 	    dlg_editbox_set(ctrl, dlg, cfg->host);
@@ -40,6 +45,9 @@ static void config_host_handler(union control *ctrl, void *dlg,
     } else if (event == EVENT_VALCHANGE) {
 	if (cfg->protocol == PROT_SERIAL)
 	    dlg_editbox_get(ctrl, dlg, cfg->serline, lenof(cfg->serline));
+	 
+	else if (cfg->protocol == PROT_CYGTERM) // cygputty 
+	    dlg_editbox_get(ctrl, dlg, cfg->cygcmd, lenof(cfg->cygcmd)); // cygputty
 	else
 	    dlg_editbox_get(ctrl, dlg, cfg->host, lenof(cfg->host));
     }
@@ -64,6 +72,11 @@ static void config_port_handler(union control *ctrl, void *dlg,
 	     */
 	    dlg_label_change(ctrl, dlg, "Speed");
 	    sprintf(buf, "%d", cfg->serspeed);
+	    // Start cygputty 
+	} else if (cfg->protocol == PROT_CYGTERM) {
+	    dlg_label_change(ctrl, dlg, "Port (ignored)");
+	    strcpy(buf, "-");
+	    // End cygputty 
 	} else {
 	    dlg_label_change(ctrl, dlg, PORT_BOX_TITLE);
 	    sprintf(buf, "%d", cfg->port);
@@ -73,6 +86,8 @@ static void config_port_handler(union control *ctrl, void *dlg,
 	dlg_editbox_get(ctrl, dlg, buf, lenof(buf));
 	if (cfg->protocol == PROT_SERIAL)
 	    cfg->serspeed = atoi(buf);
+	else if (cfg->protocol == PROT_CYGTERM) // cygputty
+	    ;                                   // cygputty
 	else
 	    cfg->port = atoi(buf);
     }
@@ -91,6 +106,7 @@ void config_protocolbuttons_handler(union control *ctrl, void *dlg,
 				    void *data, int event)
 {
     int button;
+    int defport;   // cygputty marker
     Config *cfg = (Config *)data;
     struct hostport *hp = (struct hostport *)ctrl->radio.context.p;
 

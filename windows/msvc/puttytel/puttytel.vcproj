@@ -281,6 +281,14 @@
 				</FileConfiguration>
 			</File>
 			<File
+				RelativePath="..\..\cygcfg.c"
+				>
+			</File>
+			<File
+				RelativePath="..\..\cygterm.c"
+				>
+			</File>
+			<File
 				RelativePath="..\..\..\dialog.c"
 				>
 				<FileConfiguration

@@ -279,6 +279,10 @@
 				</FileConfiguration>
 			</File>
 			<File
+				RelativePath="..\..\cygterm.c"
+				>
+			</File>
+			<File
 				RelativePath="..\..\..\ldisc.c"
 				>
 				<FileConfiguration
