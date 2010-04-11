@@ -8,7 +8,21 @@
 #include "misc.h"
 
 /* PuTTY SC start */
-#include "pkcs11.h"
+#pragma pack(push, cryptoki, 1)
+#define CK_PTR *
+#define CK_DEFINE_FUNCTION(returnType, name) \
+   returnType __declspec(dllexport) name
+#define CK_DECLARE_FUNCTION(returnType, name) \
+   returnType __declspec(dllimport) name
+#define CK_DECLARE_FUNCTION_POINTER(returnType, name) \
+   returnType __declspec(dllimport) (* name)
+#define CK_CALLBACK_FUNCTION(returnType, name) \
+   returnType (* name)
+#ifndef NULL_PTR
+#define NULL_PTR 0
+#endif
+#include "pkcs11/pkcs11.h"
+#pragma pack(pop, cryptoki)
 /* PuTTY SC end */
 
 struct ssh_channel;

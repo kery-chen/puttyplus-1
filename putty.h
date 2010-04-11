@@ -1237,4 +1237,8 @@ void expire_timer_context(void *ctx);
 int run_timers(long now, long *next);
 void timer_change_notify(long next);
 
+// PuTTY Plus start
+#define SECURITY_WIN32
+// PuTTY Plus end
+
 #endif

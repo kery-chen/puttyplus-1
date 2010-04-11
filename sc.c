@@ -32,7 +32,21 @@
 
 /* putty */
 #include "ssh.h"
-#include "pkcs11.h"
+#pragma pack(push, cryptoki, 1)
+#define CK_PTR *
+#define CK_DEFINE_FUNCTION(returnType, name) \
+   returnType __declspec(dllexport) name
+#define CK_DECLARE_FUNCTION(returnType, name) \
+   returnType __declspec(dllimport) name
+#define CK_DECLARE_FUNCTION_POINTER(returnType, name) \
+   returnType __declspec(dllimport) (* name)
+#define CK_CALLBACK_FUNCTION(returnType, name) \
+   returnType (* name)
+#ifndef NULL_PTR
+#define NULL_PTR 0
+#endif
+#include "pkcs11/pkcs11.h"
+#pragma pack(pop, cryptoki)
 
 /* this */
 #include "sc.h"
@@ -193,6 +207,15 @@ int sc_init_library(void *f, int try_write_syslog, sc_lib *sclib,
    ActivClient generates token labels on the fly, so we can't count on
    them being the same from one session to the next.  */
 
+/*  ActivClient is wierd indeed but I believe the correct thing to do is 
+	to look for the certificate we need on any token. If the token we 
+	saw last time has been lost and subsequently replaced then it won't
+	be the same token (and indeed it won't be the same exact certificate).
+	It get's complicated so I'm not going to change it now as I'll need
+	to think about it some more. I believe the ActivIdentity guys do a 
+	heuristic approach where they try to match the serial number and then
+	the Subject and Issuer DNs, etc... Anyway, leaving this as it is for 
+	now. */
 CK_SESSION_HANDLE sc_get_session(void *f, int try_write_syslog, CK_FUNCTION_LIST_PTR fl,
                                  const char *token_label) {
 #define SC_MAX_SLOT 16
@@ -765,6 +788,23 @@ unsigned char *sc_get_pub(void *f, int try_write_syslog, sc_lib *sclib,
     return NULL;
 }
 
+unsigned char sc_needs_pin(void *f, int try_write_syslog, sc_lib *sclib, const char* token_label) {
+    CK_SESSION_HANDLE session = 0;
+    session = sc_get_session(f, try_write_syslog, sclib->m_fl, token_label);
+    if (session != 0) {
+		CK_SESSION_INFO sessionInfo;
+		CK_RV rv = sclib->m_fl->C_GetSessionInfo(session, &sessionInfo);
+		if (CKR_OK == rv) {
+			CK_TOKEN_INFO token_info;
+			rv = sclib->m_fl->C_GetTokenInfo(sessionInfo.slotID, &token_info);
+			if (CKR_OK == rv) {
+				return token_info.flags & CKF_PROTECTED_AUTHENTICATION_PATH;
+			}
+		}
+	}
+    return 0;
+}
+
 /* elements within sc_pubkey_blob must NOT be freed */
 struct sc_pubkey_blob *sc_login_pub(void *f, int try_write_syslog, sc_lib *sclib,
                                     const char *token_label, const char *password) {
@@ -777,7 +817,15 @@ struct sc_pubkey_blob *sc_login_pub(void *f, int try_write_syslog, sc_lib *sclib
         return NULL;
     }
 
-    rv = sclib->m_fl->C_Login(session, CKU_USER, (CK_CHAR_PTR)password, strlen(password));
+	// only use the password that was passed in if it makes sense to do so 
+	// ideally we'd use the "protected authentication path" which mean
+	// that the middleware will ask us (e.g. ActivClient) or a PIN Pad 
+	// on the card reader (if present, available to PKCS#11 etc).
+	if (sc_needs_pin(f, try_write_syslog, sclib, token_label)) {
+		rv = sclib->m_fl->C_Login(session, CKU_USER, (CK_CHAR_PTR)password, strlen(password));
+	} else {
+		rv = sclib->m_fl->C_Login(session, CKU_USER, NULL, NULL); 
+	}
     if (CKR_OK != rv) {
         logevent(f, "sc: Login failed for public key");
         if(try_write_syslog) sc_write_syslog("sc: Login failed");

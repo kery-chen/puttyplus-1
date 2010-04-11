@@ -32,3 +32,19 @@ void random_destroy_seed(void)
 void noise_ultralight(unsigned long data)
 {
 }
+
+void noise_get_heavy(void (*func) (void *, int))
+{
+}
+
+void noise_get_light(void (*func) (void *, int))
+{
+}
+
+void noise_get_regular(void (*func) (void *, int))
+{
+}
+
+void noise_regular(void)
+{
+}

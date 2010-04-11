@@ -75,8 +75,12 @@ unsigned char    *sc_get_pub(void *f, int try_write_syslog, sc_lib *sclib,
                              char **algorithm, int *blob_len);
 struct sc_pubkey_blob *sc_login_pub(void *f, int try_write_syslog, sc_lib *sclib,
                                     const char *token_label, const char *password);
+
+unsigned char sc_needs_pin(void *f, int try_write_syslog, sc_lib *sclib, const char* token_label);
+
 unsigned char    *sc_sig(void *f, int try_write_syslog, sc_lib *sclib,
                          const char *token_label, const char *password_s,
                          char *sigdata, int sigdata_len, int *sigblob_len);
+
 
 #endif
