@@ -389,4 +389,11 @@ void win_setup_config_box(struct controlbox *b, HWND *hwndp, int has_help,
 		     HELPCTX(ssh_tunnels_xauthority),
 		     dlg_stdfilesel_handler, I(offsetof(Config, xauthfile)));
     }
+    // Start cygputty
+     /*
+     * cygterm back end is available on Windows.
+     */
+    if (!midsession || (protocol == PROT_CYGTERM))
+        cygterm_setup_config_box(b, midsession);
+    // End cygputty
 }

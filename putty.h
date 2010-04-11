@@ -306,6 +306,7 @@ enum {
 enum {
     /* Protocol back ends. (cfg.protocol) */
     PROT_RAW, PROT_TELNET, PROT_RLOGIN, PROT_SSH,
+    PROT_CYGTERM, // cygputty marker
     /* PROT_SERIAL is supported on a subset of platforms, but it doesn't
      * hurt to define it globally. */
     PROT_SERIAL
@@ -490,6 +491,10 @@ struct config_tag {
     int serdatabits, serstopbits;
     int serparity;
     int serflow;
+    // start Cygterm options 
+    int cygautopath;
+    char cygcmd[512];
+    // end Cygterm options
     /* Keyboard options */
     int bksp_is_delete;
     int rxvt_homeend;
@@ -916,6 +921,14 @@ extern Backend telnet_backend;
  * Exports from ssh.c.
  */
 extern Backend ssh_backend;
+
+// Start cygputty
+/*
+ * Exports from cygterm.c.
+ */
+extern Backend cygterm_backend;
+void cygterm_setup_config_box(struct controlbox *b, int midsession);
+// End cygputty
 
 /*
  * Exports from ldisc.c.

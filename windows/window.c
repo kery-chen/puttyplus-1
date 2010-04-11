@@ -520,6 +520,20 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmdline, int show)
 			strncpy(cfg.host, q, sizeof(cfg.host) - 1);
 			cfg.host[sizeof(cfg.host) - 1] = '\0';
 			got_host = 1;
+        } else if (cfg.protocol == PROT_CYGTERM) {
+            /* Concatenate all the remaining arguments separating
+             * them with spaces to get the command line to execute.
+             */
+            char *p = cfg.cygcmd;
+            char *const end = cfg.cygcmd + sizeof cfg.cygcmd;
+            for (; i < argc && p < end; i++) {
+                //p = stpcpy_max(p, argv[i], end - p - 1);
+				p = strncpy(p, argv[i], end - p - 1);
+                *p++ = ' ';
+            }
+            assert(p > cfg.cygcmd && p <= end);
+            *--p = '\0';
+            got_host = 1;
 		    } else {
 			/*
 			 * Otherwise, treat this argument as a host

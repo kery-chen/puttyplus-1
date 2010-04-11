@@ -642,6 +642,8 @@ int cfg_launchable(const Config *cfg)
 {
     if (cfg->protocol == PROT_SERIAL)
 	return cfg->serline[0] != 0;
+    else if (cfg->protocol == PROT_CYGTERM)    // cygputty marker
+    	return cfg->cygcmd[0] != 0;            // cygputty marker
     else
 	return cfg->host[0] != 0;
 }
@@ -650,6 +652,8 @@ char const *cfg_dest(const Config *cfg)
 {
     if (cfg->protocol == PROT_SERIAL)
 	return cfg->serline;
+    else if (cfg->protocol == PROT_CYGTERM)  // cygputty marker
+	return cfg->cygcmd;                  // cygputty marker
     else
 	return cfg->host;
 }
