@@ -7859,7 +7859,9 @@ static void do_ssh2_authconn(Ssh ssh, unsigned char *in, int inlen,
 		while (!key) {
 		    const char *error;  /* not live over crReturn */
                     /* PuTTY SC marker */
-		    if (s->publickey_encrypted || (s->can_pkcs11 && s->pkcs11_key_loaded)) {
+			if (s->publickey_encrypted && (s->can_pkcs11 && s->pkcs11_key_loaded 
+					&& sc_needs_pin(ssh->frontend, ssh->cfg.try_write_syslog, 
+						ssh->cfg.sclib, ssh->cfg.pkcs11_token_label))) {
 			/*
 			 * Get a passphrase from the user.
 			 */
@@ -7911,7 +7913,9 @@ static void do_ssh2_authconn(Ssh ssh, unsigned char *in, int inlen,
                       key11 = sc_login_pub(ssh->frontend, ssh->cfg.try_write_syslog, ssh->cfg.sclib,
                                            (const char *)&ssh->cfg.pkcs11_token_label, passphrase);
                       key = (struct ssh2_userkey *)key11;
-                      if(key11) {
+					  if (!passphrase) {
+						   memset(passphrase11, 0, sizeof(passphrase11));
+					  } else if (key11) {
                         strcpy(passphrase11, passphrase);
                       }
                     }

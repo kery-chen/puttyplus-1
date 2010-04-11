@@ -884,13 +884,22 @@ unsigned char *sc_sig(void *f, int try_write_syslog, sc_lib *sclib,
         return NULL;
     }
   
-    rv = sclib->m_fl->C_Login(session, CKU_USER, (CK_CHAR_PTR)pwd, strlen(pwd));
-    if (CKR_OK != rv) {
-        logevent(f, "sc: Login failed in sc_sig");
-        sclib->m_fl->C_CloseSession(session);
-        return NULL;
-    }
     rv = sclib->m_fl->C_FindObjectsInit(session, key_template, 4);
+	if (CKR_SESSION_HANDLE_INVALID == rv) {
+		// session is not open for some reason, so try to open it and retry
+		if (sc_needs_pin(f, try_write_syslog, sclib, token_label)) {
+			rv = sclib->m_fl->C_Login(session, CKU_USER, (CK_CHAR_PTR)password_s, strlen(password_s));
+		} else {
+			rv = sclib->m_fl->C_Login(session, CKU_USER, NULL, NULL); 
+		}
+		if (CKR_OK != rv) {
+			logevent(f, "sc: Login failed in sc_sig");
+			sclib->m_fl->C_CloseSession(session);
+			return NULL;
+		} else {
+			rv = sclib->m_fl->C_FindObjectsInit(session, key_template, 4);
+		}
+	}
     if (CKR_OK != rv) {
         sprintf(msg, "sc: C_FindObjectsInit priv key failed, 0x%.4x", (int)rv);
         goto err;
